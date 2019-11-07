@@ -390,7 +390,7 @@ elif config.optimizer == "Adam" or config.optimizer == "adam":
                   metrics=["MAE", "MSE"])
     callbacks = [check_point, early_stopping, tbCallBack]
 else:
-    raise
+    raise Exception
 
 
 while config.batch_size > 1:
