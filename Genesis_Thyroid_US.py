@@ -38,7 +38,7 @@ import numpy as np
 from tqdm import tqdm
 from scipy.misc import comb
 from sklearn import metrics
-from unet3d import *
+from unet2d import *
 from keras.callbacks import LambdaCallback, TensorBoard
 from skimage.transform import resize
 from optparse import OptionParser
@@ -90,14 +90,14 @@ class setup_config():
     train_fold=[0,1,2,3,4]
     valid_fold=[5,6]
     test_fold=[7,8,9]
-    hu_max = 1000.0
-    hu_min = -1000.0
+    hu_max = 255
+    hu_min = 0
     def __init__(self, model="Unet",
                  note="",
                  data_augmentation=True,
                  input_rows=64, 
                  input_cols=64,
-                 input_deps=32,
+                 input_deps=1,
                  batch_size=64,
                  nb_class=1,
                  nonlinear_rate=0.95,
@@ -162,12 +162,14 @@ config.display()
 
 # In[2]:
 
+
 def bernstein_poly(i, n, t):
     """
      The Bernstein polynomial of n, i as a function of t
     """
 
     return comb(n, i) * ( t**(n-i) ) * (1 - t)**i
+
 
 def bezier_curve(points, nTimes=1000):
     """
@@ -196,6 +198,7 @@ def bezier_curve(points, nTimes=1000):
 
     return xvals, yvals
 
+
 def data_augmentation(x, y, prob=0.5):
     # augmentation by flipping
     cnt = 3
@@ -206,6 +209,7 @@ def data_augmentation(x, y, prob=0.5):
         cnt = cnt - 1
 
     return x, y
+
 
 def nonlinear_transformation(x, prob=0.5):
     if random.random() >= prob:
@@ -222,67 +226,57 @@ def nonlinear_transformation(x, prob=0.5):
     nonlinear_x = np.interp(x, xvals, yvals)
     return nonlinear_x
 
+
 def local_pixel_shuffling(x, prob=0.5):
     if random.random() >= prob:
         return x
     image_temp = copy.deepcopy(x)
     orig_image = copy.deepcopy(x)
-    _, img_rows, img_cols, img_deps = x.shape
+    img_rows, img_cols = x.shape
     num_block = 500
     for _ in range(num_block):
         block_noise_size_x = random.randint(1, img_rows//10)
         block_noise_size_y = random.randint(1, img_cols//10)
-        block_noise_size_z = random.randint(1, img_deps//10)
         noise_x = random.randint(0, img_rows-block_noise_size_x)
         noise_y = random.randint(0, img_cols-block_noise_size_y)
-        noise_z = random.randint(0, img_deps-block_noise_size_z)
-        window = orig_image[0, noise_x:noise_x+block_noise_size_x, 
-                               noise_y:noise_y+block_noise_size_y, 
-                               noise_z:noise_z+block_noise_size_z,
-                           ]
+        window = orig_image[noise_x:noise_x+block_noise_size_x,
+                            noise_y:noise_y+block_noise_size_y]
         window = window.flatten()
         np.random.shuffle(window)
-        window = window.reshape((block_noise_size_x, 
-                                 block_noise_size_y, 
-                                 block_noise_size_z))
-        image_temp[0, noise_x:noise_x+block_noise_size_x, 
-                      noise_y:noise_y+block_noise_size_y, 
-                      noise_z:noise_z+block_noise_size_z] = window
+        window = window.reshape((block_noise_size_x,
+                                 block_noise_size_y))
+        image_temp[noise_x:noise_x+block_noise_size_x,
+                   noise_y:noise_y+block_noise_size_y] = window
     local_shuffling_x = image_temp
 
     return local_shuffling_x
 
+
 def image_in_painting(x):
-    _, img_rows, img_cols, img_deps = x.shape
+    in_painting_x = copy.deepcopy(x)
+    img_rows, img_cols = x.shape
     block_noise_size_x = random.randint(10, 20)
     block_noise_size_y = random.randint(10, 20)
-    block_noise_size_z = random.randint(10, 20)
     noise_x = random.randint(3, img_rows-block_noise_size_x-3)
     noise_y = random.randint(3, img_cols-block_noise_size_y-3)
-    noise_z = random.randint(3, img_deps-block_noise_size_z-3)
-    x[:, 
-      noise_x:noise_x+block_noise_size_x, 
-      noise_y:noise_y+block_noise_size_y, 
-      noise_z:noise_z+block_noise_size_z] = random.random()
-    return x
+    in_painting_x[noise_x:noise_x+block_noise_size_x,
+      noise_y:noise_y+block_noise_size_y] = random.random()
+    return in_painting_x
+
 
 def image_out_painting(x):
-    _, img_rows, img_cols, img_deps = x.shape
+    img_rows, img_cols = x.shape
     block_noise_size_x = img_rows - random.randint(10, 20)
     block_noise_size_y = img_cols - random.randint(10, 20)
-    block_noise_size_z = img_deps - random.randint(10, 20)
     noise_x = random.randint(3, img_rows-block_noise_size_x-3)
     noise_y = random.randint(3, img_cols-block_noise_size_y-3)
-    noise_z = random.randint(3, img_deps-block_noise_size_z-3)
     image_temp = copy.deepcopy(x)
-    x = np.random.rand(x.shape[0], x.shape[1], x.shape[2], x.shape[3], ) * 1.0
-    x[:, 
-      noise_x:noise_x+block_noise_size_x, 
-      noise_y:noise_y+block_noise_size_y, 
-      noise_z:noise_z+block_noise_size_z] = image_temp[:, noise_x:noise_x+block_noise_size_x, 
-                                                          noise_y:noise_y+block_noise_size_y, 
-                                                          noise_z:noise_z+block_noise_size_z]
-    return x
+    out_painting_x = copy.deepcopy(x)
+    out_painting_x[:, :] = random.random()
+    out_painting_x[noise_x:noise_x+block_noise_size_x,
+                   noise_y:noise_y+block_noise_size_y] = image_temp[noise_x:noise_x+block_noise_size_x,
+                                                                    noise_y:noise_y+block_noise_size_y]
+    return out_painting_x
                 
 
 
@@ -346,7 +340,7 @@ print("x_valid: {} | {:.2f} ~ {:.2f}".format(x_valid.shape, np.min(x_valid), np.
 
 
 if config.model == "Vnet":
-    model = unet_model_3d((1, config.input_rows, config.input_cols, config.input_deps), batch_normalization=True)
+    model = unet((1, config.input_rows, config.input_cols, config.input_deps), batch_normalization=True)
 if options.weights is not None:
     print("Load the pre-trained weights from {}".format(options.weights))
     model.load_weights(options.weights)

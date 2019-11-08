@@ -134,7 +134,7 @@ def infinite_generator_from_one_slice(config, img_array):
     # 调整在额定的像素值范围内,并归一化到[0,1]之间
     img_array[img_array < config.hu_min] = config.hu_min
     img_array[img_array > config.hu_max] = config.hu_max
-    # img_array = 1.0*(img_array-config.hu_min) / (config.hu_max-config.hu_min)
+    img_array = 1.0*(img_array-config.hu_min) / (config.hu_max-config.hu_min)
     
     slice_set = np.zeros((config.scale, config.input_rows, config.input_cols), dtype=float)
     
