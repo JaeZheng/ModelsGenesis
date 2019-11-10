@@ -39,7 +39,8 @@ from tqdm import tqdm
 from scipy.misc import comb
 from sklearn import metrics
 from unet2d import *
-from keras.callbacks import LambdaCallback, TensorBoard
+from keras.callbacks import LambdaCallback, TensorBoard, EarlyStopping, ModelCheckpoint, LearningRateScheduler
+from keras.optimizers import SGD
 from skimage.transform import resize
 from optparse import OptionParser
 from keras.utils import plot_model
@@ -203,7 +204,7 @@ def data_augmentation(x, y, prob=0.5):
     # augmentation by flipping
     cnt = 3
     while random.random() < prob and cnt > 0:
-        degree = random.choice([0, 1, 2])
+        degree = random.choice([0, 1])
         x = np.flip(x, axis=degree)
         y = np.flip(y, axis=degree)
         cnt = cnt - 1
@@ -279,9 +280,8 @@ def image_out_painting(x):
     return out_painting_x
                 
 
-
 def generate_pair(img, batch_size):
-    img_rows, img_cols, img_deps = img.shape[2], img.shape[3], img.shape[4]
+    img_rows, img_cols  = img.shape[1], img.shape[2]
     while True:
         index = [i for i in range(img.shape[0])]
         random.shuffle(index)
@@ -309,7 +309,7 @@ def generate_pair(img, batch_size):
                 else:
                     # Outpainting
                     x[n] = image_out_painting(x[n])
-        yield (x, y)
+        yield (np.expand_dims(x, axis=-1), np.expand_dims(y, axis=-1))
 
 
 # learning rate schedule
@@ -326,21 +326,23 @@ def step_decay(epoch):
 
 x_train = []
 for i,fold in enumerate(tqdm(config.train_fold)):
-    s = np.load(os.path.join(config.DATA_DIR, "bat_"+str(options.scale)+"_s_64x64x32_"+str(fold)+".npy"))
+    s = np.load(os.path.join(config.DATA_DIR, "bat_"+str(options.scale)+"_64x64_"+str(fold)+".npy"))
     x_train.extend(s)
-x_train = np.expand_dims(np.array(x_train), axis=1)
+# x_train = np.expand_dims(np.array(x_train), axis=-1)
+x_train = np.array(x_train)
 print("x_train: {} | {:.2f} ~ {:.2f}".format(x_train.shape, np.min(x_train), np.max(x_train)))
 
 x_valid = []
 for i,fold in enumerate(tqdm(config.valid_fold)):
-    s = np.load(os.path.join(config.DATA_DIR, "bat_"+str(options.scale)+"_s_64x64x32_"+str(fold)+".npy"))
+    s = np.load(os.path.join(config.DATA_DIR, "bat_"+str(options.scale)+"_64x64_"+str(fold)+".npy"))
     x_valid.extend(s)
-x_valid = np.expand_dims(np.array(x_valid), axis=1)
+# x_valid = np.expand_dims(np.array(x_valid), axis=-1)
+x_valid = np.array(x_valid)
 print("x_valid: {} | {:.2f} ~ {:.2f}".format(x_valid.shape, np.min(x_valid), np.max(x_valid)))
 
 
 if config.model == "Vnet":
-    model = unet((1, config.input_rows, config.input_cols, config.input_deps), batch_normalization=True)
+    model = unet(input_size=(64,64,1))
 if options.weights is not None:
     print("Load the pre-trained weights from {}".format(options.weights))
     model.load_weights(options.weights)
@@ -361,22 +363,22 @@ tbCallBack = TensorBoard(log_dir=os.path.join(logs_path, config.exp_name),
                         )
 tbCallBack.set_model(model)    
 
-early_stopping = keras.callbacks.EarlyStopping(monitor='val_loss', 
+early_stopping = EarlyStopping(monitor='val_loss',
                                                patience=config.patience, 
                                                verbose=0,
                                                mode='min',
                                               )
-check_point = keras.callbacks.ModelCheckpoint(os.path.join(model_path, config.exp_name+".h5"),
+check_point = ModelCheckpoint(os.path.join(model_path, config.exp_name+".h5"),
                                               monitor='val_loss', 
                                               verbose=1, 
                                               save_best_only=True, 
                                               mode='min',
                                              )
 if config.optimizer == "SGD" or config.optimizer == "sgd":
-    model.compile(optimizer=keras.optimizers.SGD(lr=config.lr, momentum=0.9, decay=0.0, nesterov=False), 
+    model.compile(optimizer=SGD(lr=config.lr, momentum=0.9, decay=0.0, nesterov=False),
                   loss="MSE", 
                   metrics=["MAE", "MSE"])
-    lrate = keras.callbacks.LearningRateScheduler(step_decay, verbose=1)
+    lrate = LearningRateScheduler(step_decay, verbose=1)
     callbacks = [check_point, early_stopping, tbCallBack, lrate]
 elif config.optimizer == "Adam" or config.optimizer == "adam":
     model.compile(optimizer="Adam", 
