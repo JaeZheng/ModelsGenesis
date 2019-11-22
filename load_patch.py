@@ -7,9 +7,11 @@
 import numpy as np
 import cv2
 import copy
-from scipy.misc import comb
+from scipy.special import comb
 import random
 import matplotlib.pyplot as plt
+from keras.models import *
+# from Genesis_Thyroid_US import generate_pair
 
 
 def bernstein_poly(i, n, t):
@@ -101,30 +103,34 @@ def local_pixel_shuffling(x, prob=0.5):
     return local_shuffling_x
 
 
-def image_in_painting(x):
+def image_in_painting(x, prob=0.9):
     in_painting_x = copy.deepcopy(x)
     img_rows, img_cols = x.shape
-    block_noise_size_x = random.randint(10, 20)
-    block_noise_size_y = random.randint(10, 20)
-    noise_x = random.randint(3, img_rows-block_noise_size_x-3)
-    noise_y = random.randint(3, img_cols-block_noise_size_y-3)
-    in_painting_x[noise_x:noise_x+block_noise_size_x,
-      noise_y:noise_y+block_noise_size_y] = random.random()
+    num_painting = 5
+    for _ in range(num_painting):
+        if random.random() >= prob:
+            continue
+        block_noise_size_x = random.randint(10, 20)
+        block_noise_size_y = random.randint(10, 20)
+        noise_x = random.randint(3, img_rows-block_noise_size_x-3)
+        noise_y = random.randint(3, img_cols-block_noise_size_y-3)
+        in_painting_x[noise_x:noise_x+block_noise_size_x,
+          noise_y:noise_y+block_noise_size_y] = random.random()
     return in_painting_x
 
 
 def image_out_painting(x):
+    out_painting_x = copy.deepcopy(x)
+    out_painting_x[:, :] = random.random()
     img_rows, img_cols = x.shape
-    block_noise_size_x = img_rows - random.randint(10, 20)
-    block_noise_size_y = img_cols - random.randint(10, 20)
+    block_noise_size_x = img_rows - random.randint(20, 30)
+    block_noise_size_y = img_cols - random.randint(20, 30)
     noise_x = random.randint(3, img_rows-block_noise_size_x-3)
     noise_y = random.randint(3, img_cols-block_noise_size_y-3)
     image_temp = copy.deepcopy(x)
-    out_painting_x = copy.deepcopy(x)
-    out_painting_x[:, :] = random.random()
     out_painting_x[noise_x:noise_x+block_noise_size_x,
                    noise_y:noise_y+block_noise_size_y] = image_temp[noise_x:noise_x+block_noise_size_x,
-                                                                    noise_y:noise_y+block_noise_size_y]
+                                                                        noise_y:noise_y+block_noise_size_y]
     return out_painting_x
 
 
@@ -172,6 +178,70 @@ def transform_demo():
     plt.show()
 
 
+def visualize_model_genesis():
+    # model = load_model('pretrained_weights/Vnet-genesis_thyroid_us.h5')
+    npy = np.load('datasets/thyroid/generated_patch/bat_32_128x128_2.npy')
+    # 原图
+    example = npy[99]
+    print(example.shape)
+    # 非线性变换
+    non = nonlinear_transformation(example)
+    # 局部像素打乱
+    local_shuff = local_pixel_shuffling(example)
+    # 向内补丁
+    in_painting = image_in_painting(example)
+    # 向外补丁
+    out_painting = image_out_painting(example)
+    # 还原
+    # tmp = copy.deepcopy(non)
+    # tmp = np.expand_dims(tmp, axis=0)
+    # tmp = np.expand_dims(tmp, axis=-1)
+    # result_non = model.predict(tmp)
+    # tmp = copy.deepcopy(local_shuff)
+    # tmp = np.expand_dims(tmp, axis=0)
+    # tmp = np.expand_dims(tmp, axis=-1)
+    # result_local_shuff = model.predict(tmp)
+    # tmp = copy.deepcopy(in_painting)
+    # tmp = np.expand_dims(tmp, axis=0)
+    # tmp = np.expand_dims(tmp, axis=-1)
+    # result_in_painting = model.predict(tmp)
+    # tmp = copy.deepcopy(out_painting)
+    # tmp = np.expand_dims(tmp, axis=0)
+    # tmp = np.expand_dims(tmp, axis=-1)
+    # result_out_painting = model.predict(tmp)
+    print(np.mean(example))
+    print(np.mean(non))
+    print(np.mean(local_shuff))
+    print(np.mean(in_painting))
+    print(np.mean(out_painting))
+    # print(np.mean(result_non))
+    # print(np.mean(result_local_shuff))
+    # print(np.mean(result_in_painting))
+    # print(np.mean(result_out_painting))
+    plt.figure(figsize=(10, 5))  # 设置窗口大小
+    plt.suptitle('Multi_Image')  # 图片名称
+    plt.subplot(3, 3, 1), plt.title('original')
+    plt.imshow(example, cmap='gray'), plt.axis('off')
+    plt.subplot(3, 3, 2), plt.title('nonlinear')
+    plt.imshow(non, cmap='gray'), plt.axis('off')
+    plt.subplot(3, 3, 3), plt.title('local_shuff')
+    plt.imshow(local_shuff, cmap='gray'), plt.axis('off')
+    plt.subplot(3, 3, 4), plt.title('in_painting')
+    plt.imshow(in_painting, cmap='gray'), plt.axis('off')
+    plt.subplot(3, 3, 5), plt.title('out_painting')
+    plt.imshow(out_painting, cmap='gray'), plt.axis('off')
+    # plt.subplot(3, 3, 6), plt.title('result_non')
+    # plt.imshow(result_non[0,:,:,0], cmap='gray'), plt.axis('off')
+    # plt.subplot(3, 3, 7), plt.title('result_local_shuff')
+    # plt.imshow(result_local_shuff[0, :, :, 0], cmap='gray'), plt.axis('off')
+    # plt.subplot(3, 3, 8), plt.title('result_in_painting')
+    # plt.imshow(result_in_painting[0, :, :, 0], cmap='gray'), plt.axis('off')
+    # plt.subplot(3, 3, 9), plt.title('result_out_painting')
+    # plt.imshow(result_out_painting[0, :, :, 0], cmap='gray'), plt.axis('off')
+    plt.show()
+
+
 if __name__ == '__main__':
     # load_and_write_patch()
-    transform_demo()
+    # transform_demo()
+    visualize_model_genesis()

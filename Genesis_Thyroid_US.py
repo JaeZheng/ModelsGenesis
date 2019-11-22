@@ -26,6 +26,7 @@ import keras
 print("Keras = {}".format(keras.__version__))
 import tensorflow as tf
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # or any {'0', '1', '2'}
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 import copy
@@ -50,8 +51,8 @@ sys.setrecursionlimit(40000)
 parser = OptionParser()
 
 parser.add_option("--arch", dest="arch", help="Vnet", default=None, type="string")
-parser.add_option("--input_rows", dest="input_rows", help="input rows", default=64, type="int")
-parser.add_option("--input_cols", dest="input_cols", help="input cols", default=64, type="int")
+parser.add_option("--input_rows", dest="input_rows", help="input rows", default=128, type="int")
+parser.add_option("--input_cols", dest="input_cols", help="input cols", default=128, type="int")
 parser.add_option("--input_deps", dest="input_deps", help="input deps", default=1, type="int")
 parser.add_option("--nb_class", dest="nb_class", help="number of class", default=1, type="int")
 parser.add_option("--verbose", dest="verbose", help="verbose", default=0, type="int")
@@ -253,30 +254,34 @@ def local_pixel_shuffling(x, prob=0.5):
     return local_shuffling_x
 
 
-def image_in_painting(x):
+def image_in_painting(x, prob=0.9):
     in_painting_x = copy.deepcopy(x)
     img_rows, img_cols = x.shape
-    block_noise_size_x = random.randint(10, 20)
-    block_noise_size_y = random.randint(10, 20)
-    noise_x = random.randint(3, img_rows-block_noise_size_x-3)
-    noise_y = random.randint(3, img_cols-block_noise_size_y-3)
-    in_painting_x[noise_x:noise_x+block_noise_size_x,
-      noise_y:noise_y+block_noise_size_y] = random.random()
+    num_painting = 5
+    for _ in range(num_painting):
+        if random.random() >= prob:
+            continue
+        block_noise_size_x = random.randint(10, 20)
+        block_noise_size_y = random.randint(10, 20)
+        noise_x = random.randint(3, img_rows - block_noise_size_x - 3)
+        noise_y = random.randint(3, img_cols - block_noise_size_y - 3)
+        in_painting_x[noise_x:noise_x + block_noise_size_x,
+        noise_y:noise_y + block_noise_size_y] = random.random()
     return in_painting_x
 
 
 def image_out_painting(x):
+    out_painting_x = copy.deepcopy(x)
+    out_painting_x[:, :] = random.random()
     img_rows, img_cols = x.shape
-    block_noise_size_x = img_rows - random.randint(10, 20)
-    block_noise_size_y = img_cols - random.randint(10, 20)
+    block_noise_size_x = img_rows - random.randint(20, 30)
+    block_noise_size_y = img_cols - random.randint(20, 30)
     noise_x = random.randint(3, img_rows-block_noise_size_x-3)
     noise_y = random.randint(3, img_cols-block_noise_size_y-3)
     image_temp = copy.deepcopy(x)
-    out_painting_x = copy.deepcopy(x)
-    out_painting_x[:, :] = random.random()
     out_painting_x[noise_x:noise_x+block_noise_size_x,
                    noise_y:noise_y+block_noise_size_y] = image_temp[noise_x:noise_x+block_noise_size_x,
-                                                                    noise_y:noise_y+block_noise_size_y]
+                                                                        noise_y:noise_y+block_noise_size_y]
     return out_painting_x
                 
 
@@ -326,7 +331,8 @@ def step_decay(epoch):
 
 x_train = []
 for i,fold in enumerate(tqdm(config.train_fold)):
-    s = np.load(os.path.join(config.DATA_DIR, "bat_"+str(options.scale)+"_64x64_"+str(fold)+".npy"))
+    s = np.load(os.path.join(config.DATA_DIR, "bat_"+str(options.scale)+"_"+
+                             str(options.input_cols)+"x"+str(options.input_rows)+"_"+str(fold)+".npy"))
     x_train.extend(s)
 # x_train = np.expand_dims(np.array(x_train), axis=-1)
 x_train = np.array(x_train)
@@ -334,7 +340,8 @@ print("x_train: {} | {:.2f} ~ {:.2f}".format(x_train.shape, np.min(x_train), np.
 
 x_valid = []
 for i,fold in enumerate(tqdm(config.valid_fold)):
-    s = np.load(os.path.join(config.DATA_DIR, "bat_"+str(options.scale)+"_64x64_"+str(fold)+".npy"))
+    s = np.load(os.path.join(config.DATA_DIR, "bat_"+str(options.scale)+"_"+
+                             str(options.input_cols)+"x"+str(options.input_rows)+"_"+str(fold)+".npy"))
     x_valid.extend(s)
 # x_valid = np.expand_dims(np.array(x_valid), axis=-1)
 x_valid = np.array(x_valid)
@@ -342,7 +349,7 @@ print("x_valid: {} | {:.2f} ~ {:.2f}".format(x_valid.shape, np.min(x_valid), np.
 
 
 if config.model == "Vnet":
-    model = unet(input_size=(64,64,1))
+    model = unet(input_size=(options.input_cols,options.input_rows,1))
 if options.weights is not None:
     print("Load the pre-trained weights from {}".format(options.weights))
     model.load_weights(options.weights)
