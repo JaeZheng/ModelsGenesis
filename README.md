@@ -16,7 +16,8 @@ This repository provides the official Keras implementation of training Models Ge
 [Zongwei Zhou](https://www.zongweiz.com/)<sup>1</sup>, [Vatsal Sodha](https://github.com/vatsal-sodha)<sup>1</sup>, [Md Mahfuzur Rahman Siddiquee](https://github.com/mahfuzmohammad)<sup>1</sup>,  <br/>
 [Ruibin Feng](https://chs.asu.edu/ruibin-feng)<sup>1</sup>, [Nima Tajbakhsh](https://www.linkedin.com/in/nima-tajbakhsh-b5454376/)<sup>1</sup>, [Michael B. Gotway](https://www.mayoclinic.org/biographies/gotway-michael-b-m-d/bio-20055566)<sup>2</sup> and [Jianming Liang](https://chs.asu.edu/jianming-liang)<sup>1</sup> <br/>
 <sup>1 </sup>Arizona State University,   <sup>2 </sup>Mayo Clinic <br/>
-International Conference on Medical Image Computing and Computer Assisted Intervention (MICCAI), 2019 (<b>Young Scientist Award</b>)  <br/>
+International Conference on Medical Image Computing and Computer Assisted Intervention (MICCAI), 2019 <br/>
+<b>[Young Scientist Award](http://www.miccai.org/about-miccai/awards/young-scientist-award/)</b>  <br/>
 [paper](http://www.cs.toronto.edu/~liang/Publications/ModelsGenesis/MICCAI_2019_Full.pdf) | [code](https://github.com/MrGiovanni/ModelsGenesis) | [slides](https://docs.wixstatic.com/ugd/deaea1_c5e0f8cd9cde4c3db339d866483cbcd3.pdf) | [poster](http://www.cs.toronto.edu/~liang/Publications/ModelsGenesis/Models_Genesis_Poster.pdf) | talk ([YouTube](https://youtu.be/5W_uGzBloZs), [YouKu](https://v.youku.com/v_show/id_XNDM5NjQ1ODAxMg==.html?sharefrom=iphone&sharekey=496e1494c76ed263653aa3aada61c23e6))
 
 <br/>
@@ -78,14 +79,14 @@ X, Y = your_data_loader()
 # prepare the 3D model
 from unet3d import *
 input_channels, input_rows, input_cols, input_deps = 1, 64, 64, 32
-num_class, activate = 2, 'softmax'
+num_class, activate = 2, keras.activations.softmax
 weight_dir = 'pretrained_weights/Genesis_Chest_CT.h5'
 models_genesis = unet_model_3d((input_channels, input_rows, input_cols, input_deps), batch_normalization=True)
 print("Load pre-trained Models Genesis weights from {}".format(weight_dir))
 models_genesis.load_weights(weight_dir)
 x = models_genesis.get_layer('depth_13_relu').output
 final_convolution = Conv3D(num_class, (1, 1, 1))(x)
-output = Activation(activate)(final_convolution)
+output = activate(final_convolution, axis=1)
 model = keras.models.Model(inputs=models_genesis.input, outputs=output)
 models.compile(optimizer="adam", loss=dice_coef_loss, metrics=[mean_iou,dice_coef])
 
@@ -93,7 +94,7 @@ models.compile(optimizer="adam", loss=dice_coef_loss, metrics=[mean_iou,dice_coe
 model.fit(X, Y)
 ```
 
-If the image modality in your target task is CT, we suggest that all the intensity values be clipped on the min (-1000) and max (+1000) interesting Hounsfield Unit range and then scale between 0 and 1. If the image modality is MRI, we suggest that all the intensity values be clipped on min (0) and max (+4000) interesting range and then scale between 0 and 1. For any other modalities, you may want to first clip on the meaningful intensity range and then scale between 0 and 1. We adopt input cubes shaped in (N, 1, 64, 64, 32) during model pre-training, where N denotes the number of training samples.
+**Prepare your own data:** If the image modality in your target task is CT, we suggest that all the intensity values be clipped on the min (-1000) and max (+1000) interesting Hounsfield Unit range and then scale between 0 and 1. If the image modality is MRI, we suggest that all the intensity values be clipped on min (0) and max (+4000) interesting range and then scale between 0 and 1. For any other modalities, you may want to first clip on the meaningful intensity range and then scale between 0 and 1. We adopt input cubes shaped in (N, 1, 64, 64, 32) during model pre-training, where N denotes the number of training samples, although any size is acceptable as long as it is divisible by 16 (=2^4) due to four down-sampling layers in V-Net.
 
 ### 4. Major results from our work
 
@@ -117,12 +118,34 @@ $ pip install -r requirements.txt
 ```
 
 ### 2. Create the data generator (LUNA-2016 for example)
-Download LUNA-2016 dataset from the challenge website (https://luna16.grand-challenge.org/download/) or run the script (`coming soon`) below. The LUNA-2016 dataset will be automatically downloaded and saved into `./datasets/luna16` directory.
+
+#### For your convenience, we have provided our own extracted 3D cubes from LUNA16. 
+
+Download from [Google Drive](https://drive.google.com/drive/folders/1ZEQHc4FLFHK204UJ1iABQVrjQOFmx_gX?usp=sharing) or [Baidu Wangpan](https://pan.baidu.com/s/1U4qzEu-Ijl8hkSCLTr-agA) <- code: m8g4. Each sub-folder is named as 'bat_N_s_64x64x32', where *N* denotes the number of cubes extracted from each patient. You may select the scale of training samples accordingly based on your resources in hand: larger *N* demands longer learning time and more powerful GPUs/CPUs, while may (or may not) result in a more generic visual representation. We have adopted *N*=32 in our MICCAI paper. 
+
+- The processed cubes directory structure
+```
+generated_cubes/
+    |--  bat_32_s_64x64x32_0.npy: cubes extracted from subset0 in luna16
+    |--  bat_32_s_64x64x32_1.npy: cubes extracted from subset1 in luna16
+    |--  bat_32_s_64x64x32_2.npy: cubes extracted from subset2 in luna16
+    |--  bat_32_s_64x64x32_3.npy: cubes extracted from subset3 in luna16
+    |--  bat_32_s_64x64x32_4.npy: cubes extracted from subset4 in luna16
+    |--  bat_32_s_64x64x32_5.npy: cubes extracted from subset5 in luna16
+    |--  bat_32_s_64x64x32_6.npy: cubes extracted from subset6 in luna16
+    |--  bat_32_s_64x64x32_7.npy: cubes extracted from subset7 in luna16
+    |--  bat_32_s_64x64x32_8.npy: cubes extracted from subset8 in luna16
+    |--  bat_32_s_64x64x32_9.npy: cubes extracted from subset9 in luna16
+```
+
+#### You can also extract 3D cubes by your own following two steps below:
+
+Step 1: Download LUNA-2016 dataset from the challenge website (https://luna16.grand-challenge.org/download/) or run the script (`coming soon`) below. The LUNA-2016 dataset will be automatically downloaded and saved into `./datasets/luna16` directory.
 ```bash
 $ bash download_dataset.sh luna16
 ```
 
-Extract 3D cubes from the patient data by running the script below. The extracted 3D cubes will be saved into `./generated_cubes` directory.
+Step 2: Extract 3D cubes from the patient data by running the script below. The extracted 3D cubes will be saved into `./generated_cubes` directory.
 ```bash
 for subset in `seq 0 9`
 do
@@ -166,7 +189,7 @@ If you use this code or use our pre-trained weights for your research, please ci
   address="Cham",
   pages="384--393",
   isbn="978-3-030-32251-9",
-  url="http://www.cs.toronto.edu/~liang/Publications/ModelsGenesis/MICCAI_2019_Full.pdf"
+  url="https://link.springer.com/chapter/10.1007/978-3-030-32251-9_42"
 }
 ```
 
