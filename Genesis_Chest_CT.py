@@ -23,9 +23,17 @@ import warnings
 warnings.filterwarnings('ignore')
 import os
 import keras
+import keras.backend.tensorflow_backend as KTF
 print("Keras = {}".format(keras.__version__))
 import tensorflow as tf
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # or any {'0', '1', '2'}
+# 指定显卡
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+# 自适应分配显存
+config = tf.ConfigProto()
+config.gpu_options.allow_growth=True
+session = tf.Session(config=config)
+KTF.set_session(session)
 
 
 import copy
@@ -93,9 +101,9 @@ class setup_config():
     nb_epoch = 10000
     patience = 50
     lr = 1e-0
-    train_fold=[0,1,2,3,4]
-    valid_fold=[5,6]
-    test_fold=[7,8,9]
+    train_fold=[0,1]
+    valid_fold=[5]
+    test_fold=[7]
     hu_max = 1000.0
     hu_min = -1000.0
     def __init__(self, model="Unet",
